@@ -1,0 +1,5 @@
+{
+  "name": "Sagostund",
+  "description": "En magisk app som skapar personliga godnattsagor på svenska med hjälp av AI.",
+  "requestFramePermissions": []
+}
