@@ -7,21 +7,44 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;600;700&family=Quicksand:wght@400;600;700&display=swap" rel="stylesheet">
     <script>
       tailwind.config = {
         theme: {
           extend: {
             fontFamily: {
               sans: ['Quicksand', 'sans-serif'],
+              display: ['Fredoka', 'sans-serif'],
             },
             colors: {
-              'story-bg': '#FFF8E1', // Warm cream
-              'story-paper': '#FFFDFA',
+              'magic-sky-start': '#4facfe',
+              'magic-sky-end': '#00f2fe',
+              'story-paper': '#FFFBF0',
               'kid-blue': '#4FC3F7',
-              'kid-green': '#81C784',
+              'kid-purple': '#BA68C8',
+              'kid-pink': '#F06292',
               'kid-orange': '#FFB74D',
-              'kid-red': '#E57373',
+              'kid-yellow': '#FFF176',
+            },
+            animation: {
+              'float-slow': 'float 6s ease-in-out infinite',
+              'float-medium': 'float 4s ease-in-out infinite',
+              'twinkle': 'twinkle 3s ease-in-out infinite',
+              'bounce-slight': 'bounce-slight 2s infinite',
+            },
+            keyframes: {
+              float: {
+                '0%, 100%': { transform: 'translateY(0)' },
+                '50%': { transform: 'translateY(-10px)' },
+              },
+              twinkle: {
+                '0%, 100%': { opacity: '1', transform: 'scale(1)' },
+                '50%': { opacity: '0.5', transform: 'scale(0.8)' },
+              },
+              'bounce-slight': {
+                 '0%, 100%': { transform: 'translateY(0)' },
+                 '50%': { transform: 'translateY(-5px)' },
+              }
             }
           }
         }
@@ -29,20 +52,34 @@
     </script>
     <style>
       body {
-        background-color: #FFF8E1; /* Warm background */
+        background: linear-gradient(to bottom, #4facfe 0%, #00f2fe 100%);
         font-family: 'Quicksand', sans-serif;
+        min-height: 100vh;
+        overflow-x: hidden;
       }
+      
+      h1, h2, h3, button {
+        font-family: 'Fredoka', sans-serif;
+      }
+
       /* Custom scrollbar for story text */
       .story-scroll::-webkit-scrollbar {
-        width: 10px;
+        width: 12px;
       }
       .story-scroll::-webkit-scrollbar-track {
-        background: transparent;
+        background: rgba(255,255,255,0.5);
+        border-radius: 10px;
       }
       .story-scroll::-webkit-scrollbar-thumb {
         background-color: #FFB74D;
-        border-radius: 20px;
-        border: 3px solid #FFF8E1;
+        border-radius: 10px;
+        border: 3px solid rgba(255,255,255,0.5);
+      }
+
+      .cloud-shape {
+        background: white;
+        border-radius: 100px;
+        box-shadow: 0 8px 32px rgba(31, 38, 135, 0.1);
       }
     </style>
   <script type="importmap">

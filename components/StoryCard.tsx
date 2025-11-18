@@ -1,51 +1,55 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { StoryResponse } from '../types';
+import { StoryResponse, Language } from '../types';
 import { generateStorySpeech } from '../services/geminiService';
 import { decodeBase64, decodePcmAudioData } from '../utils/audioUtils';
+import { translations } from '../utils/localization';
 
 interface StoryCardProps {
   story: StoryResponse;
   onReset: () => void;
+  language: Language;
 }
 
 const AVAILABLE_VOICES = [
-  { name: 'Zephyr', label: 'Zephyr (Ljus)' },
-  { name: 'Kore', label: 'Kore (Lugn)' },
-  { name: 'Puck', label: 'Puck (Busig)' },
-  { name: 'Charon', label: 'Charon (Djup)' },
-  { name: 'Fenrir', label: 'Fenrir (Mörk)' },
+  { name: 'Zephyr', label: 'Zephyr' },
+  { name: 'Kore', label: 'Kore' },
+  { name: 'Puck', label: 'Puck' },
+  { name: 'Charon', label: 'Charon' },
+  { name: 'Fenrir', label: 'Fenrir' },
 ];
 
-const SpeakerIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
-  </svg>
-);
+const formatTime = (seconds: number) => {
+  const mins = Math.floor(seconds / 60);
+  const secs = seconds % 60;
+  return `${mins}:${secs.toString().padStart(2, '0')}`;
+};
 
-const StopIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-5 h-5">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 7.5A2.25 2.25 0 017.5 5.25h9a2.25 2.25 0 012.25 2.25v9a2.25 2.25 0 01-2.25 2.25h-9a2.25 2.25 0 01-2.25-2.25v-9z" />
-  </svg>
-);
-
-const LoadingSpinner = () => (
-  <svg className="animate-spin -ml-1 mr-2 h-5 w-5 text-current" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-  </svg>
-);
-
-export const StoryCard: React.FC<StoryCardProps> = ({ story, onReset }) => {
-  const [isPlaying, setIsPlaying] = useState(false);
-  const [isAudioLoading, setIsAudioLoading] = useState(false);
+export const StoryCard: React.FC<StoryCardProps> = ({ story, onReset, language }) => {
+  // State
+  const [playbackState, setPlaybackState] = useState<'idle' | 'playing' | 'paused' | 'buffering'>('idle');
   const [selectedVoice, setSelectedVoice] = useState('Zephyr');
+  const [elapsedTime, setElapsedTime] = useState(0);
   
+  // Refs for audio logic
   const audioContextRef = useRef<AudioContext | null>(null);
   const sourceNodeRef = useRef<AudioBufferSourceNode | null>(null);
-  const audioBufferRef = useRef<AudioBuffer | null>(null);
-  const currentVoiceRef = useRef<string>('Zephyr');
+  const chunksRef = useRef<string[]>([]);
+  const currentChunkIndexRef = useRef(0);
+  const audioCacheRef = useRef<Map<number, AudioBuffer>>(new Map());
+  const processingQueueRef = useRef<Set<number>>(new Set());
+  const isStoppedRef = useRef(false);
 
-  // Cleanup audio on unmount
+  const t = translations[language];
+
+  // Cleanup and Reset Effects
+  useEffect(() => {
+    stopAudio(true);
+    chunksRef.current = [];
+    audioCacheRef.current.clear();
+    currentChunkIndexRef.current = 0;
+    setElapsedTime(0);
+  }, [story]);
+
   useEffect(() => {
     return () => {
       if (sourceNodeRef.current) {
@@ -57,163 +61,235 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onReset }) => {
     };
   }, []);
 
+  // Timer Effect
+  useEffect(() => {
+    let interval: number;
+    if (playbackState === 'playing') {
+      interval = window.setInterval(() => {
+        setElapsedTime(prev => prev + 1);
+      }, 1000);
+    }
+    return () => clearInterval(interval);
+  }, [playbackState]);
+
   const handleVoiceChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const newVoice = e.target.value;
     setSelectedVoice(newVoice);
-    
-    // If playing, stop
-    if (isPlaying) {
-      if (sourceNodeRef.current) {
-        sourceNodeRef.current.stop();
-        sourceNodeRef.current = null;
-      }
-      setIsPlaying(false);
+    if (playbackState === 'playing' || playbackState === 'buffering') {
+      pauseAudio();
     }
-
-    // If the voice changed, clear the buffer so we fetch new audio
-    if (newVoice !== currentVoiceRef.current) {
-      audioBufferRef.current = null;
-      currentVoiceRef.current = newVoice;
-    }
+    audioCacheRef.current.clear();
   };
 
-  const toggleAudio = async () => {
-    // STOP
-    if (isPlaying) {
-      if (sourceNodeRef.current) {
-        sourceNodeRef.current.stop();
-        sourceNodeRef.current = null;
-      }
-      setIsPlaying(false);
-      return;
-    }
+  const fetchAudioChunk = async (index: number, text: string): Promise<AudioBuffer | null> => {
+    if (audioCacheRef.current.has(index)) return audioCacheRef.current.get(index) || null;
+    if (processingQueueRef.current.has(index)) return null;
 
-    // PLAY
+    processingQueueRef.current.add(index);
+
     try {
-      setIsAudioLoading(true);
-
-      // Initialize AudioContext if needed
       if (!audioContextRef.current) {
         audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
       }
-
-      // Check cache
-      let buffer = audioBufferRef.current;
-
-      if (!buffer) {
-        // Fetch new audio
-        const base64Audio = await generateStorySpeech(story.title + ". " + story.content, selectedVoice);
-        const pcmData = decodeBase64(base64Audio);
-        buffer = await decodePcmAudioData(pcmData, audioContextRef.current);
-        audioBufferRef.current = buffer;
-      }
-
-      // Browser requires resume on user interaction
-      if (audioContextRef.current.state === 'suspended') {
-        await audioContextRef.current.resume();
-      }
-
-      const source = audioContextRef.current.createBufferSource();
-      source.buffer = buffer;
-      source.connect(audioContextRef.current.destination);
+      const base64Audio = await generateStorySpeech(text, selectedVoice);
+      const pcmData = decodeBase64(base64Audio);
+      const buffer = await decodePcmAudioData(pcmData, audioContextRef.current);
       
-      source.onended = () => setIsPlaying(false);
-      
-      source.start();
-      sourceNodeRef.current = source;
-      setIsPlaying(true);
-
+      audioCacheRef.current.set(index, buffer);
+      processingQueueRef.current.delete(index);
+      return buffer;
     } catch (error) {
-      console.error("Audio playback error:", error);
-      alert("Kunde inte spela upp ljudet just nu.");
-    } finally {
-      setIsAudioLoading(false);
+      console.error(`Failed to load chunk ${index}`, error);
+      processingQueueRef.current.delete(index);
+      return null;
+    }
+  };
+
+  const playNextChunk = async () => {
+    if (isStoppedRef.current) return;
+
+    const idx = currentChunkIndexRef.current;
+    if (idx >= chunksRef.current.length) {
+      setPlaybackState('idle');
+      currentChunkIndexRef.current = 0;
+      setElapsedTime(0);
+      return;
+    }
+
+    let buffer = audioCacheRef.current.get(idx);
+    if (!buffer) {
+      setPlaybackState('buffering');
+      buffer = await fetchAudioChunk(idx, chunksRef.current[idx]);
+      if (!buffer) {
+        setPlaybackState('paused'); 
+        return;
+      }
+    }
+
+    if (isStoppedRef.current) return;
+
+    setPlaybackState('playing');
+    if (audioContextRef.current?.state === 'suspended') {
+      await audioContextRef.current.resume();
+    }
+
+    const source = audioContextRef.current!.createBufferSource();
+    source.buffer = buffer;
+    source.connect(audioContextRef.current!.destination);
+    source.onended = () => {
+      if (!isStoppedRef.current) {
+        currentChunkIndexRef.current++;
+        playNextChunk();
+      }
+    };
+    source.start();
+    sourceNodeRef.current = source;
+
+    // Prefetch
+    const nextIdx = idx + 1;
+    if (nextIdx < chunksRef.current.length) fetchAudioChunk(nextIdx, chunksRef.current[nextIdx]);
+    if (nextIdx + 1 < chunksRef.current.length) fetchAudioChunk(nextIdx + 1, chunksRef.current[nextIdx + 1]);
+  };
+
+  const startAudio = async () => {
+    isStoppedRef.current = false;
+    if (!audioContextRef.current) {
+      audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+    }
+    if (chunksRef.current.length === 0) {
+      const contentChunks = story.content.split(/\n\s*\n/).filter(c => c.trim().length > 0);
+      chunksRef.current = [story.title, ...contentChunks];
+    }
+    playNextChunk();
+  };
+
+  const pauseAudio = () => {
+    isStoppedRef.current = true;
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.stop();
+      sourceNodeRef.current = null;
+    }
+    setPlaybackState('paused');
+  };
+
+  const stopAudio = (reset: boolean = false) => {
+    isStoppedRef.current = true;
+    if (sourceNodeRef.current) {
+      sourceNodeRef.current.stop();
+      sourceNodeRef.current = null;
+    }
+    setPlaybackState('idle');
+    if (reset) {
+      currentChunkIndexRef.current = 0;
+      setElapsedTime(0);
+    }
+  };
+
+  const toggleAudio = () => {
+    if (playbackState === 'playing' || playbackState === 'buffering') {
+      pauseAudio();
+    } else {
+      startAudio();
     }
   };
 
   return (
-    <div className="animate-fadeIn w-full max-w-3xl mx-auto mt-8 p-1 pb-20">
-      <div className="bg-story-paper rounded-3xl shadow-xl border-4 border-kid-orange overflow-hidden relative">
-        {/* Decoration Dots */}
-        <div className="absolute top-4 left-4 w-3 h-3 rounded-full bg-kid-red"></div>
-        <div className="absolute top-4 right-4 w-3 h-3 rounded-full bg-kid-blue"></div>
+    <div className="animate-fade-in-up w-full max-w-4xl mx-auto mt-4 pb-12">
+      {/* Book Container */}
+      <div className="bg-story-paper rounded-[2rem] shadow-2xl border-[6px] border-white relative overflow-hidden">
+        
+        {/* Book Spine/Decoration */}
+        <div className="absolute top-0 left-0 w-full h-4 bg-gradient-to-r from-kid-blue via-kid-purple to-kid-pink opacity-50"></div>
+        <div className="absolute bottom-0 left-0 w-full h-4 bg-gradient-to-r from-kid-blue via-kid-purple to-kid-pink opacity-50"></div>
 
-        <div className="p-8 md:p-12">
-          <div className="flex flex-col items-center mb-8 space-y-4">
-            <h2 className="text-3xl md:text-4xl font-bold text-center text-gray-800 font-sans leading-tight">
+        <div className="p-8 md:p-16">
+          
+          {/* Title Header */}
+          <div className="text-center mb-10 relative">
+            <div className="inline-block px-6 py-2 rounded-full bg-orange-50 border-2 border-orange-100 text-orange-800 font-bold text-sm uppercase tracking-wider mb-4 shadow-sm">
+              {language === 'sv' ? 'En magisk saga' : 'A magical story'}
+            </div>
+            <h2 className="text-4xl md:text-6xl font-display font-bold text-gray-800 mb-4 leading-tight">
               {story.title}
             </h2>
-            
-            <div className="flex flex-wrap justify-center items-center gap-3 bg-white p-2 rounded-full border border-gray-200 shadow-sm">
-              <div className="flex items-center px-2">
-                 <span className="text-sm font-bold text-gray-500 mr-2">Röst:</span>
-                 <select 
+            <div className="w-24 h-1.5 bg-kid-orange mx-auto rounded-full opacity-50"></div>
+          </div>
+
+          {/* Controls */}
+          <div className="sticky top-4 z-20 bg-white/90 backdrop-blur-md p-4 rounded-2xl shadow-lg border border-gray-100 mb-8 flex flex-wrap items-center justify-between gap-4 transform transition-all hover:shadow-xl">
+             <div className="flex items-center gap-2">
+               <span className="text-xl">🗣️</span>
+               <select 
                   value={selectedVoice}
                   onChange={handleVoiceChange}
-                  className="bg-transparent font-bold text-gray-700 outline-none cursor-pointer hover:text-kid-orange transition-colors"
+                  className="bg-transparent font-display font-bold text-gray-700 text-lg outline-none cursor-pointer hover:text-kid-blue"
                  >
                    {AVAILABLE_VOICES.map(v => (
                      <option key={v.name} value={v.name}>{v.label}</option>
                    ))}
-                 </select>
-              </div>
+               </select>
+             </div>
 
-              <div className="h-6 w-px bg-gray-300 hidden md:block"></div>
+             <div className="flex items-center gap-3 flex-1 justify-center">
+                <button
+                  onClick={toggleAudio}
+                  className={`
+                    flex items-center gap-2 px-6 py-3 rounded-full font-bold text-lg transition-all transform active:scale-95 shadow-md
+                    ${(playbackState === 'playing' || playbackState === 'buffering')
+                      ? 'bg-kid-yellow text-yellow-900 border-2 border-yellow-400' 
+                      : 'bg-kid-blue text-white border-2 border-blue-400 hover:bg-blue-400'
+                    }
+                  `}
+                >
+                  {playbackState === 'buffering' ? (
+                    <span className="animate-pulse">⏳ {t.loadingAudio}</span>
+                  ) : playbackState === 'playing' ? (
+                    <span>⏸️ {t.stopButton.replace('Sluta', 'Pausa').replace('Stop', 'Pause')}</span>
+                  ) : (
+                    <span>▶️ {playbackState === 'paused' ? (language === 'sv' ? 'Fortsätt' : 'Resume') : t.listenButton}</span>
+                  )}
+                </button>
+             </div>
 
-              <button
-                onClick={toggleAudio}
-                disabled={isAudioLoading}
-                className={`
-                  flex items-center gap-2 px-4 py-2 rounded-full font-bold transition-all text-sm md:text-base min-w-[160px] justify-center
-                  ${isPlaying 
-                    ? 'bg-red-100 text-red-600 border border-red-200 hover:bg-red-200' 
-                    : 'bg-kid-green/10 text-green-700 border border-kid-green/50 hover:bg-kid-green/20'
-                  }
-                `}
-              >
-                {isAudioLoading ? (
-                  <>
-                    <LoadingSpinner />
-                    <span>Laddar...</span>
-                  </>
-                ) : isPlaying ? (
-                  <>
-                    <StopIcon />
-                    <span>Sluta lyssna</span>
-                  </>
-                ) : (
-                  <>
-                    <SpeakerIcon />
-                    <span>Lyssna</span>
-                  </>
-                )}
-              </button>
+             <div className="font-mono font-bold text-gray-500 bg-gray-100 px-3 py-1 rounded-lg">
+               {formatTime(elapsedTime)}
+             </div>
+          </div>
+
+          {/* Content */}
+          <div className="prose prose-xl max-w-none text-gray-700 leading-loose font-sans story-scroll max-h-[60vh] overflow-y-auto pr-6 pl-2 relative">
+            {/* Drop Cap Effect for first letter */}
+            <div className="first-letter:text-6xl first-letter:font-display first-letter:font-bold first-letter:text-kid-blue first-letter:float-left first-letter:mr-3 first-letter:mt-[-10px] whitespace-pre-line">
+               {story.content}
             </div>
           </div>
-          
-          <div className="prose prose-lg max-w-none text-gray-700 leading-relaxed whitespace-pre-line story-scroll max-h-[60vh] overflow-y-auto pr-4">
-            {story.content}
-          </div>
 
+          {/* Moral */}
           {story.moral && (
-            <div className="mt-8 p-6 bg-amber-50 rounded-2xl border-2 border-amber-200 flex gap-4 items-start">
-              <span className="text-3xl">🌟</span>
-              <div>
-                <h4 className="font-bold text-amber-800 uppercase text-sm tracking-wider mb-1">Sensmoral</h4>
-                <p className="text-amber-900 italic">{story.moral}</p>
+            <div className="mt-12 p-8 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-3xl border-4 border-white shadow-inner relative overflow-hidden group">
+              <div className="absolute top-0 left-0 opacity-10 text-9xl transform -translate-x-8 -translate-y-8">✨</div>
+              <div className="relative z-10 flex gap-6 items-center">
+                <span className="text-5xl transform group-hover:scale-110 transition-transform duration-300">🌟</span>
+                <div>
+                  <h4 className="font-display font-bold text-orange-800 uppercase tracking-wider mb-2">{t.moralLabel}</h4>
+                  <p className="font-sans text-xl text-orange-900 italic font-medium">"{story.moral}"</p>
+                </div>
               </div>
             </div>
           )}
         </div>
-        
-        <div className="bg-amber-100 p-4 flex justify-center">
+
+        {/* Footer Actions */}
+        <div className="bg-white border-t-4 border-gray-50 p-6 flex justify-center">
           <button 
             onClick={onReset}
-            className="text-amber-800 font-bold hover:text-amber-900 underline decoration-2 decoration-amber-400 underline-offset-4"
+            className="group flex items-center gap-2 text-gray-400 hover:text-kid-pink transition-colors font-bold font-display text-lg"
           >
-            Läsa en till saga?
+            <span className="transform group-hover:-rotate-180 transition-transform duration-500">🔄</span>
+            {t.readAgain}
           </button>
         </div>
+
       </div>
     </div>
   );

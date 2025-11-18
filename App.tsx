@@ -1,44 +1,54 @@
 import React, { useState } from 'react';
 import { generateStory } from './services/geminiService';
-import { StoryState, Mood } from './types';
+import { StoryState, Mood, Language } from './types';
 import { Button } from './components/Button';
 import { StoryCard } from './components/StoryCard';
 import { MoodSelector } from './components/MoodSelector';
+import { translations } from './utils/localization';
 
-// SVG Icons for UI
-const BookIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-8 h-8 md:w-10 md:h-10 text-white">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
-  </svg>
+// Decorative Background Elements
+const Cloud = ({ className }: { className: string }) => (
+  <div className={`absolute pointer-events-none opacity-80 ${className}`}>
+    <svg viewBox="0 0 24 24" fill="currentColor" className="text-white w-full h-full filter drop-shadow-lg">
+      <path d="M17.5,19c4.142,0,7.5-3.358,7.5-7.5c0-4.142-3.358-7.5-7.5-7.5c-0.716,0-1.398,0.112-2.033,0.308 C14.599,1.753,11.961,0,9,0C4.582,0,1,3.582,1,8c0,0.309,0.021,0.613,0.058,0.913C0.422,9.42,0,10.173,0,11c0,2.209,1.791,4,4,4 c0.146,0,0.288-0.011,0.428-0.027C5.119,17.298,7.343,19,10,19c0.363,0,0.717-0.032,1.062-0.091C12.386,20.729,14.772,22,17.5,22 c2.879,0,5.25-1.429,6.424-3.612C22.577,18.767,20.966,19,17.5,19z" />
+    </svg>
+  </div>
 );
 
-const SparklesIcon = () => (
-  <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth={2} stroke="currentColor" className="w-6 h-6">
-    <path strokeLinecap="round" strokeLinejoin="round" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09zM18.259 8.715L18 9.75l-.259-1.035a3.375 3.375 0 00-2.455-2.456L14.25 6l1.036-.259a3.375 3.375 0 002.455-2.456L18 2.25l.259 1.035a3.375 3.375 0 002.456 2.456L21.75 6l-1.035.259a3.375 3.375 0 00-2.456 2.456zM16.894 20.567L16.5 21.75l-.394-1.183a2.25 2.25 0 00-1.423-1.423L13.5 18.75l1.183-.394a2.25 2.25 0 001.423-1.423l.394-1.183.394 1.183a2.25 2.25 0 001.423 1.423l1.183.394-1.183.394a2.25 2.25 0 00-1.423 1.423z" />
-  </svg>
+const Star = ({ className }: { className: string }) => (
+  <div className={`absolute text-yellow-300 animate-twinkle pointer-events-none ${className}`}>
+    <svg viewBox="0 0 24 24" fill="currentColor" className="w-full h-full filter drop-shadow-md">
+      <path d="M12 0.587l3.668 7.568 8.332 1.151-6.064 5.828 1.48 8.279-7.416-3.967-7.417 3.967 1.481-8.279-6.064-5.828 8.332-1.151z"/>
+    </svg>
+  </div>
 );
 
-const LoadingCloud = () => (
-  <div className="flex flex-col items-center justify-center p-12 space-y-6">
+const LoadingCloud: React.FC<{ text: string, subtext: string }> = ({ text, subtext }) => (
+  <div className="flex flex-col items-center justify-center p-12 space-y-6 animate-float-slow">
     <div className="relative">
-      <div className="w-24 h-24 border-8 border-kid-blue border-t-transparent rounded-full animate-spin"></div>
-      <div className="absolute inset-0 flex items-center justify-center text-4xl">✨</div>
+      <div className="text-8xl relative z-10">☁️</div>
+      <div className="absolute top-1/2 left-1/2 transform -translate-x-1/2 -translate-y-1/2 text-4xl animate-spin">✨</div>
     </div>
-    <p className="text-xl font-bold text-kid-blue animate-pulse text-center">
-      Sago-fen tänker så det knakar...<br/>
-      <span className="text-base font-normal text-gray-500">Häller upp lite magi...</span>
-    </p>
+    <div className="bg-white/90 backdrop-blur-sm px-8 py-4 rounded-3xl shadow-xl text-center border-4 border-white">
+      <p className="text-2xl font-display font-bold text-kid-blue mb-2">
+        {text}
+      </p>
+      <p className="text-lg text-gray-500 font-sans">{subtext}</p>
+    </div>
   </div>
 );
 
 const App: React.FC = () => {
   const [input, setInput] = useState('');
   const [mood, setMood] = useState<Mood>(Mood.HAPPY);
+  const [language, setLanguage] = useState<Language>('sv');
   const [storyState, setStoryState] = useState<StoryState>({
     isLoading: false,
     data: null,
     error: null,
   });
+
+  const t = translations[language];
 
   const handleGenerate = async () => {
     if (!input.trim()) return;
@@ -46,13 +56,13 @@ const App: React.FC = () => {
     setStoryState({ isLoading: true, data: null, error: null });
     
     try {
-      const result = await generateStory(input, mood);
+      const result = await generateStory(input, mood, language);
       setStoryState({ isLoading: false, data: result, error: null });
     } catch (error) {
       setStoryState({ 
         isLoading: false, 
         data: null, 
-        error: error instanceof Error ? error.message : 'Något gick fel.' 
+        error: error instanceof Error ? error.message : t.errorGeneric 
       });
     }
   };
@@ -70,99 +80,133 @@ const App: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen bg-story-bg pb-20">
+    <div className="relative min-h-screen pb-20 overflow-hidden">
+      
+      {/* Animated Background Elements */}
+      <Cloud className="w-32 h-20 top-10 left-10 animate-float-slow opacity-60" />
+      <Cloud className="w-48 h-32 top-20 right-20 animate-float-medium opacity-40" />
+      <Cloud className="w-24 h-16 bottom-32 left-1/4 animate-float-slow delay-75 opacity-50" />
+      <Star className="w-8 h-8 top-32 left-1/3 delay-100" />
+      <Star className="w-6 h-6 top-12 right-1/3 delay-300" />
+      <Star className="w-10 h-10 bottom-20 right-20 delay-500" />
+
       {/* Header */}
-      <header className="bg-kid-orange shadow-md relative z-10">
-        <div className="container mx-auto px-4 py-4 flex items-center justify-center gap-3">
-          <div className="bg-white/20 p-2 rounded-full">
-            <BookIcon />
+      <header className="relative z-10 pt-6 px-4 mb-8">
+        <div className="container mx-auto flex items-center justify-between bg-white/80 backdrop-blur-md p-4 rounded-full shadow-lg border-2 border-white">
+          <div className="flex items-center gap-3 pl-2">
+            <span className="text-4xl animate-bounce-slight">🏰</span>
+            <h1 className="text-2xl md:text-3xl font-display font-bold text-kid-blue tracking-wide">
+              {t.appTitle}
+            </h1>
           </div>
-          <h1 className="text-3xl md:text-4xl font-bold text-white tracking-wide drop-shadow-md">
-            Sagostund
-          </h1>
+          
+          {/* Language Switcher */}
+          <div className="flex gap-1 bg-blue-50 p-1 rounded-full border border-blue-100">
+             <button 
+              onClick={() => setLanguage('sv')}
+              className={`px-4 py-2 rounded-full text-sm font-bold transition-all transform ${language === 'sv' ? 'bg-white text-kid-blue shadow-md scale-105' : 'text-gray-400 hover:text-kid-blue'}`}
+             >
+               🇸🇪 SV
+             </button>
+             <button 
+              onClick={() => setLanguage('en')}
+              className={`px-4 py-2 rounded-full text-sm font-bold transition-all transform ${language === 'en' ? 'bg-white text-kid-blue shadow-md scale-105' : 'text-gray-400 hover:text-kid-blue'}`}
+             >
+               🇬🇧 EN
+             </button>
+          </div>
         </div>
-        <div className="absolute -bottom-6 left-0 right-0 h-6 bg-kid-orange rounded-b-[50%] transform scale-x-110"></div>
       </header>
 
-      <main className="container mx-auto px-4 pt-12 md:pt-16 flex flex-col items-center">
+      <main className="container mx-auto px-4 relative z-10 flex flex-col items-center">
         
         {!storyState.data && !storyState.isLoading && (
           <div className="w-full max-w-2xl animate-fade-in-up">
-            <div className="text-center mb-8">
-              <h2 className="text-2xl md:text-3xl font-bold text-gray-700 mb-2">
-                Hej kompis! 👋
+            
+            <div className="text-center mb-8 text-white drop-shadow-md">
+              <h2 className="text-4xl font-display font-bold mb-2">
+                {t.greeting}
               </h2>
-              <p className="text-gray-600 text-lg">
-                Vad ska kvällens godnattsaga handla om?
+              <p className="text-xl font-sans font-medium opacity-95">
+                {t.promptQuestion}
               </p>
             </div>
 
-            <div className="bg-white p-6 md:p-8 rounded-3xl shadow-xl border-2 border-orange-100">
-              <div className="space-y-6">
-                <div>
-                  <label className="block text-gray-700 font-bold mb-2 ml-2 text-sm uppercase tracking-wider">
-                    Berätta lite kort...
+            {/* Magic Input Card */}
+            <div className="bg-white/95 backdrop-blur-xl p-8 md:p-10 rounded-[3rem] shadow-2xl border-4 border-white transform transition-all hover:scale-[1.01]">
+              <div className="space-y-8">
+                
+                {/* Text Input */}
+                <div className="relative group">
+                  <label className="block text-kid-blue font-display font-bold mb-3 ml-4 text-lg uppercase tracking-wider">
+                    {t.promptLabel}
                   </label>
-                  <textarea
-                    value={input}
-                    onChange={(e) => setInput(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder="T.ex. En liten drake som tappade en tand..."
-                    className="w-full p-4 text-xl border-2 border-gray-200 rounded-2xl focus:border-kid-orange focus:ring-4 focus:ring-orange-100 outline-none transition-all resize-none h-32 placeholder-gray-300"
-                  />
+                  <div className="relative">
+                    <textarea
+                      value={input}
+                      onChange={(e) => setInput(e.target.value)}
+                      onKeyDown={handleKeyDown}
+                      placeholder={t.promptPlaceholder}
+                      className="w-full p-6 text-xl font-sans text-gray-700 bg-blue-50 border-2 border-blue-100 rounded-3xl focus:border-kid-pink focus:ring-4 focus:ring-pink-100 outline-none transition-all resize-none h-40 placeholder-blue-200 shadow-inner"
+                    />
+                    <div className="absolute -top-3 -right-3 text-4xl animate-bounce-slight opacity-0 group-hover:opacity-100 transition-opacity">
+                      🧚‍♀️
+                    </div>
+                  </div>
                 </div>
 
+                {/* Mood Selection */}
                 <div>
-                  <label className="block text-gray-700 font-bold mb-2 ml-2 text-sm uppercase tracking-wider text-center">
-                    Vilken känsla?
+                  <label className="block text-kid-blue font-display font-bold mb-4 text-center text-lg uppercase tracking-wider">
+                    {t.moodLabel}
                   </label>
-                  <MoodSelector selectedMood={mood} onSelect={setMood} />
+                  <MoodSelector selectedMood={mood} onSelect={setMood} language={language} />
                 </div>
 
+                {/* Action Button */}
                 <div className="pt-4 flex justify-center">
                   <Button 
                     onClick={handleGenerate} 
                     disabled={!input.trim()}
-                    className="flex items-center gap-2 px-10 py-4 text-xl"
+                    className="w-full md:w-auto min-w-[200px]"
                   >
-                    <SparklesIcon />
-                    <span>Skapa Saga</span>
+                    <span className="text-2xl mr-2">✨</span>
+                    {t.generateButton}
                   </Button>
                 </div>
               </div>
             </div>
 
-            {/* Example Pills */}
-            <div className="mt-8 flex flex-wrap justify-center gap-2 text-sm text-gray-500">
-              <span className="px-3 py-1 bg-white rounded-full border border-gray-200">🦄 En enhörning som inte kunde flyga</span>
-              <span className="px-3 py-1 bg-white rounded-full border border-gray-200">🐻 En björn som älskade blåbär</span>
-              <span className="px-3 py-1 bg-white rounded-full border border-gray-200">🚀 En resa till månen av ost</span>
+            {/* Inspiration Pills */}
+            <div className="mt-8 flex flex-wrap justify-center gap-3">
+              {t.examples.map((ex, i) => (
+                 <button 
+                  key={i} 
+                  className="px-4 py-2 bg-white/20 backdrop-blur-md rounded-full border-2 border-white/40 text-white font-bold text-sm shadow-lg hover:bg-white hover:text-kid-blue hover:scale-105 transition-all" 
+                  onClick={() => setInput(ex.substring(2))}
+                 >
+                   {ex}
+                 </button>
+              ))}
             </div>
           </div>
         )}
 
-        {storyState.isLoading && <LoadingCloud />}
+        {storyState.isLoading && <LoadingCloud text={t.loadingTitle} subtext={t.loadingSubtitle} />}
 
         {storyState.error && (
-          <div className="bg-red-50 border-l-4 border-red-400 p-6 rounded-r-xl max-w-lg mt-8">
-            <div className="flex items-center gap-3">
-              <span className="text-3xl">🥺</span>
-              <div>
-                <h3 className="font-bold text-red-800">Hoppsan!</h3>
-                <p className="text-red-700">{storyState.error}</p>
-                <button 
-                  onClick={() => setStoryState(prev => ({...prev, error: null}))}
-                  className="text-red-600 underline mt-2 font-bold"
-                >
-                  Försök igen
-                </button>
-              </div>
-            </div>
+          <div className="bg-red-50 border-4 border-red-200 p-8 rounded-[2rem] max-w-lg mt-8 shadow-xl text-center">
+            <span className="text-6xl block mb-4">🥺</span>
+            <h3 className="font-display font-bold text-2xl text-red-500 mb-2">{t.errorTitle}</h3>
+            <p className="text-red-400 font-sans text-lg mb-4">{storyState.error}</p>
+            <Button onClick={() => setStoryState(prev => ({...prev, error: null}))} variant="secondary">
+              {t.retry}
+            </Button>
           </div>
         )}
 
         {storyState.data && (
-          <StoryCard story={storyState.data} onReset={resetStory} />
+          <StoryCard story={storyState.data} onReset={resetStory} language={language} />
         )}
 
       </main>

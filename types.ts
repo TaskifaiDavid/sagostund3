@@ -16,3 +16,5 @@ export enum Mood {
   CALM = 'Lugn',
   FUNNY = 'Rolig',
 }
+
+export type Language = 'sv' | 'en';

@@ -15,11 +15,11 @@ export const Button: React.FC<ButtonProps> = ({
   variant = 'primary',
   className = ''
 }) => {
-  const baseStyles = "font-bold text-lg py-3 px-8 rounded-full transform transition-all duration-200 active:scale-95 shadow-lg border-b-4 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none";
+  const baseStyles = "font-display font-bold text-xl py-4 px-8 rounded-[2rem] transform transition-all duration-200 active:scale-95 active:translate-y-1 shadow-[0_6px_0_0] active:shadow-none border-2 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none";
   
   const variants = {
-    primary: "bg-kid-orange border-orange-600 text-white hover:bg-orange-400",
-    secondary: "bg-kid-blue border-blue-600 text-white hover:bg-sky-400",
+    primary: "bg-kid-pink border-pink-600 text-white hover:bg-pink-400 shadow-pink-700",
+    secondary: "bg-white border-kid-blue text-kid-blue hover:bg-blue-50 shadow-blue-200",
   };
 
   return (
