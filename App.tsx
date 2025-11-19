@@ -1,9 +1,10 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { generateStory } from './services/geminiService';
-import { StoryState, Mood, Language } from './types';
+import { StoryState, Mood, Language, User } from './types';
 import { Button } from './components/Button';
 import { StoryCard } from './components/StoryCard';
 import { MoodSelector } from './components/MoodSelector';
+import { LoginModal } from './components/LoginModal';
 import { translations } from './utils/localization';
 
 // Decorative Background Elements
@@ -42,6 +43,11 @@ const App: React.FC = () => {
   const [input, setInput] = useState('');
   const [mood, setMood] = useState<Mood>(Mood.HAPPY);
   const [language, setLanguage] = useState<Language>('sv');
+  const [user, setUser] = useState<User | null>(null);
+  const [isLoginOpen, setIsLoginOpen] = useState(false);
+  const [loginError, setLoginError] = useState<string | null>(null);
+  const [configError, setConfigError] = useState<string | null>(null);
+  
   const [storyState, setStoryState] = useState<StoryState>({
     isLoading: false,
     data: null,
@@ -50,7 +56,23 @@ const App: React.FC = () => {
 
   const t = translations[language];
 
+  // Check for environment variables on mount
+  useEffect(() => {
+    if (!process.env.API_KEY) {
+      setConfigError("⚠️ API_KEY is missing! Please set it in your Vercel Settings.");
+    } else if (!process.env.APP_USERNAME || !process.env.APP_PASSWORD) {
+      setConfigError("⚠️ Login credentials missing! Please set APP_USERNAME and APP_PASSWORD in Vercel.");
+    }
+  }, []);
+
   const handleGenerate = async () => {
+    // Login check
+    if (!user) {
+      setStoryState(prev => ({ ...prev, error: t.loginError }));
+      setIsLoginOpen(true);
+      return;
+    }
+
     if (!input.trim()) return;
 
     setStoryState({ isLoading: true, data: null, error: null });
@@ -79,9 +101,42 @@ const App: React.FC = () => {
     setInput('');
   };
 
+  const handleLogin = (username: string, password: string) => {
+    // Check credentials against environment variables
+    if (username === process.env.APP_USERNAME && password === process.env.APP_PASSWORD) {
+      setUser({ name: username });
+      setIsLoginOpen(false);
+      setLoginError(null);
+      // Clear any previous login errors in story state
+      if (storyState.error === t.loginError) {
+        setStoryState(prev => ({ ...prev, error: null }));
+      }
+    } else {
+      setLoginError(t.loginInvalidCredentials);
+    }
+  };
+
+  const handleLogout = () => {
+    setUser(null);
+    setStoryState({ isLoading: false, data: null, error: null });
+  };
+
+  const openLogin = () => {
+    setLoginError(null);
+    setIsLoginOpen(true);
+  };
+
   return (
     <div className="relative min-h-screen pb-20 overflow-hidden">
       
+      <LoginModal 
+        isOpen={isLoginOpen} 
+        onClose={() => setIsLoginOpen(false)} 
+        onLogin={handleLogin} 
+        language={language} 
+        error={loginError}
+      />
+
       {/* Animated Background Elements */}
       <Cloud className="w-32 h-20 top-10 left-10 animate-float-slow opacity-60" />
       <Cloud className="w-48 h-32 top-20 right-20 animate-float-medium opacity-40" />
@@ -92,40 +147,94 @@ const App: React.FC = () => {
 
       {/* Header */}
       <header className="relative z-10 pt-6 px-4 mb-8">
-        <div className="container mx-auto flex items-center justify-between bg-white/80 backdrop-blur-md p-4 rounded-full shadow-lg border-2 border-white">
-          <div className="flex items-center gap-3 pl-2">
-            <span className="text-4xl animate-bounce-slight">🏰</span>
-            <h1 className="text-2xl md:text-3xl font-display font-bold text-kid-blue tracking-wide">
-              {t.appTitle}
-            </h1>
-          </div>
+        <div className="container mx-auto flex flex-col md:flex-row items-center justify-between gap-4 bg-white/80 backdrop-blur-md p-4 rounded-3xl shadow-lg border-2 border-white">
           
-          {/* Language Switcher */}
-          <div className="flex gap-1 bg-blue-50 p-1 rounded-full border border-blue-100">
-             <button 
-              onClick={() => setLanguage('sv')}
-              className={`px-4 py-2 rounded-full text-sm font-bold transition-all transform ${language === 'sv' ? 'bg-white text-kid-blue shadow-md scale-105' : 'text-gray-400 hover:text-kid-blue'}`}
-             >
-               🇸🇪 SV
-             </button>
-             <button 
-              onClick={() => setLanguage('en')}
-              className={`px-4 py-2 rounded-full text-sm font-bold transition-all transform ${language === 'en' ? 'bg-white text-kid-blue shadow-md scale-105' : 'text-gray-400 hover:text-kid-blue'}`}
-             >
-               🇬🇧 EN
-             </button>
+          {/* Logo Area */}
+          <div className="flex items-center gap-3 pl-2 w-full md:w-auto justify-between md:justify-start">
+            <div className="flex items-center gap-3">
+              <span className="text-4xl animate-bounce-slight">🏰</span>
+              <h1 className="text-2xl md:text-3xl font-display font-bold text-kid-blue tracking-wide">
+                {t.appTitle}
+              </h1>
+            </div>
+             {/* Mobile User Controls (visible on small screens) */}
+             <div className="md:hidden flex items-center gap-2">
+              {user ? (
+                <span className="font-bold text-kid-teal truncate max-w-[100px]">{user.name}</span>
+              ) : (
+                <button 
+                  onClick={openLogin}
+                  className="text-sm font-bold text-kid-pink border-2 border-kid-pink px-3 py-1 rounded-full"
+                >
+                  {t.loginButton}
+                </button>
+              )}
+            </div>
+          </div>
+
+          <div className="flex items-center gap-4 w-full md:w-auto justify-between md:justify-end">
+            {/* User & Login Controls (Desktop) */}
+            <div className="hidden md:flex items-center gap-4">
+              {user ? (
+                <div className="flex items-center gap-3 bg-teal-50 px-4 py-2 rounded-full border border-teal-100">
+                  <span className="font-display font-bold text-kid-teal">
+                    {t.welcomeUser}, {user.name}!
+                  </span>
+                  <button 
+                    onClick={handleLogout}
+                    className="text-xs text-gray-400 hover:text-red-400 font-bold uppercase tracking-wide"
+                  >
+                    {t.logoutButton}
+                  </button>
+                </div>
+              ) : (
+                <button 
+                  onClick={openLogin}
+                  className="bg-kid-pink text-white px-6 py-2 rounded-full font-bold font-display shadow-md hover:bg-pink-400 transition-all"
+                >
+                  🔐 {t.loginButton}
+                </button>
+              )}
+            </div>
+            
+            {/* Language Switcher */}
+            <div className="flex gap-1 bg-blue-50 p-1 rounded-full border border-blue-100">
+               <button 
+                onClick={() => setLanguage('sv')}
+                className={`px-4 py-2 rounded-full text-sm font-bold transition-all transform ${language === 'sv' ? 'bg-white text-kid-blue shadow-md scale-105' : 'text-gray-400 hover:text-kid-blue'}`}
+               >
+                 🇸🇪 SV
+               </button>
+               <button 
+                onClick={() => setLanguage('en')}
+                className={`px-4 py-2 rounded-full text-sm font-bold transition-all transform ${language === 'en' ? 'bg-white text-kid-blue shadow-md scale-105' : 'text-gray-400 hover:text-kid-blue'}`}
+               >
+                 🇬🇧 EN
+               </button>
+            </div>
           </div>
         </div>
       </header>
 
       <main className="container mx-auto px-4 relative z-10 flex flex-col items-center">
         
+        {/* Config Error Banner */}
+        {configError && (
+          <div className="w-full max-w-2xl mb-8 bg-red-500 text-white p-4 rounded-2xl shadow-lg flex items-center gap-4 animate-bounce-slight border-4 border-red-600">
+             <span className="text-3xl">⚠️</span>
+             <div>
+               <h3 className="font-bold font-display text-lg">Deployment Setup Needed</h3>
+               <p className="text-sm font-sans">{configError}</p>
+             </div>
+          </div>
+        )}
+
         {!storyState.data && !storyState.isLoading && (
           <div className="w-full max-w-2xl animate-fade-in-up">
             
             <div className="text-center mb-8 text-white drop-shadow-md">
               <h2 className="text-4xl font-display font-bold mb-2">
-                {t.greeting}
+                {user ? `${t.greeting} ${user.name}! 👋` : t.greeting}
               </h2>
               <p className="text-xl font-sans font-medium opacity-95">
                 {t.promptQuestion}
@@ -167,7 +276,7 @@ const App: React.FC = () => {
                 <div className="pt-4 flex justify-center">
                   <Button 
                     onClick={handleGenerate} 
-                    disabled={!input.trim()}
+                    disabled={!input.trim() || !!configError}
                     className="w-full md:w-auto min-w-[200px]"
                   >
                     <span className="text-2xl mr-2">✨</span>
@@ -195,13 +304,20 @@ const App: React.FC = () => {
         {storyState.isLoading && <LoadingCloud text={t.loadingTitle} subtext={t.loadingSubtitle} />}
 
         {storyState.error && (
-          <div className="bg-red-50 border-4 border-red-200 p-8 rounded-[2rem] max-w-lg mt-8 shadow-xl text-center">
+          <div className="bg-red-50 border-4 border-red-200 p-8 rounded-[2rem] max-w-lg mt-8 shadow-xl text-center animate-bounce-slight">
             <span className="text-6xl block mb-4">🥺</span>
             <h3 className="font-display font-bold text-2xl text-red-500 mb-2">{t.errorTitle}</h3>
             <p className="text-red-400 font-sans text-lg mb-4">{storyState.error}</p>
-            <Button onClick={() => setStoryState(prev => ({...prev, error: null}))} variant="secondary">
-              {t.retry}
-            </Button>
+            
+            {storyState.error === t.loginError ? (
+              <Button onClick={openLogin} variant="primary">
+                🔐 {t.loginButton}
+              </Button>
+            ) : (
+              <Button onClick={() => setStoryState(prev => ({...prev, error: null}))} variant="secondary">
+                {t.retry}
+              </Button>
+            )}
           </div>
         )}
 

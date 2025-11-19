@@ -158,7 +158,8 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onReset, language }
     }
     if (chunksRef.current.length === 0) {
       const contentChunks = story.content.split(/\n\s*\n/).filter(c => c.trim().length > 0);
-      chunksRef.current = [story.title, ...contentChunks];
+      // Start reading story immediately, skipping title
+      chunksRef.current = contentChunks;
     }
     playNextChunk();
   };
@@ -198,9 +199,9 @@ export const StoryCard: React.FC<StoryCardProps> = ({ story, onReset, language }
       {/* Book Container */}
       <div className="bg-story-paper rounded-[2rem] shadow-2xl border-[6px] border-white relative overflow-hidden">
         
-        {/* Book Spine/Decoration */}
-        <div className="absolute top-0 left-0 w-full h-4 bg-gradient-to-r from-kid-blue via-kid-purple to-kid-pink opacity-50"></div>
-        <div className="absolute bottom-0 left-0 w-full h-4 bg-gradient-to-r from-kid-blue via-kid-purple to-kid-pink opacity-50"></div>
+        {/* Book Spine/Decoration - Updated Colors */}
+        <div className="absolute top-0 left-0 w-full h-4 bg-gradient-to-r from-kid-blue via-kid-teal to-kid-pink opacity-50"></div>
+        <div className="absolute bottom-0 left-0 w-full h-4 bg-gradient-to-r from-kid-blue via-kid-teal to-kid-pink opacity-50"></div>
 
         <div className="p-8 md:p-16">
           

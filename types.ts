@@ -18,3 +18,7 @@ export enum Mood {
 }
 
 export type Language = 'sv' | 'en';
+
+export interface User {
+  name: string;
+}

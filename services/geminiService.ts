@@ -2,7 +2,15 @@ import { GoogleGenAI, Type, Modality } from "@google/genai";
 import { StoryResponse, Mood, Language } from "../types";
 import { translations } from "../utils/localization";
 
-const ai = new GoogleGenAI({ apiKey: import.meta.env.VITE_GEMINI_API_KEY });
+const getAiClient = () => {
+  const apiKey = process.env.API_KEY;
+  if (!apiKey) {
+    throw new Error("API_KEY is missing. Please configure it in your environment variables (Vercel Settings or .env.local)");
+  }
+  return new GoogleGenAI({ apiKey });
+};
+
+const ai = getAiClient();
 
 export const generateStory = async (prompt: string, mood: Mood, language: Language): Promise<StoryResponse> => {
   try {
